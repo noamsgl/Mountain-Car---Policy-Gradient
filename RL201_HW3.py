@@ -147,7 +147,7 @@ if __name__ == '__main__':
     # 0 Render full episode with learned policy
     print_title("Simulating Learned Policy")
     try:
-        W = np.loadtxt("weights.csv", delimiter=',')
+        W = np.loadtxt("weights_HW3.csv", delimiter=',')
         print("A weights file was found. Simulating:")
         simulate_agent(W)
     except:
@@ -170,6 +170,6 @@ if __name__ == '__main__':
     plt.show()
 
     # 4. Save weights to file
-    fname = "weights_{}.csv".format(datetime.now().strftime("%d-%m-%Y-%H-%M-%S"))
+    fname = "weights_HW3_{}.csv".format(datetime.now().strftime("%d-%m-%Y-%H-%M-%S"))
     print_title("Saving weights to file {}".format(fname))
     np.savetxt(fname)
