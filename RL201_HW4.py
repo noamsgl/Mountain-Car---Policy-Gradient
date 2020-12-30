@@ -1,10 +1,10 @@
+from datetime import datetime
+
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.linalg import inv
 from tqdm import tqdm
-import pickle
-from datetime import datetime
 
 """
 Assumes installation of tqdm:
@@ -14,7 +14,7 @@ If this is an issue, remove the tqdm wrapper in line #40
 """
 
 
-def features_vector(S):
+def features_vector(S, A=None):
     p, v = S
     x = abs(C_arr - np.asarray([p, v]))
     vec = np.zeros(len(x))
@@ -23,68 +23,83 @@ def features_vector(S):
     return vec
 
 
-def get_action_values(W, S):
+def get_action(s, thetas):
+    action_probabilites = [softmax(s, a, thetas[a]) for a in range(nA)]
+    return np.random.choice(range(nA), p=action_probabilites)
+
+
+def get_state_value(S, W):
+    """
+    Return V(S)
+    :param S: current state (p, v)
+    :param W: Weights of state Value function (
+    :return: state value (scalar)
+    """
     F_arr = features_vector(S)
     return F_arr.dot(W)
 
 
-def sarsa_lambda(lam, alpha):
-    # initialize variables
-    X, Y = [], []
-    epsilon = 0.05
+def softmax(s, a, theta):
+    F_arr = features_vector(s, a)
+    return np.exp(F_arr.dot(theta)) / sum([np.exp(F_arr.dot(theta)) for a in range(nA)])
 
-    W = np.ones((nC, nA))
-    e = np.zeros((nC, nA))
+
+def get_expected_feature(S, theta):
+    """
+    Return expected features based on policy derived from theta with softmax
+    :param theta: vector of weights
+    :return:
+    """
+    F_arr = features_vector(S)
+    return np.mean([softmax(S, a, theta) * F_arr for a in range(nA)])
+
+
+def actor_critic(alpha_theta, alpha_w):
+    """
+    Solves for the environment
+    :param alpha_w: learning rate for w (state-value func)
+    :param alpha_theta: learning rate for theta (policy)
+    :return: learned parameters theta, W
+    """
+    X, Y = [], []
+    W = np.ones(nC)
+    thetas = [np.ones(nC) for _ in range(nA)]
+
     S = env.reset()
-    action_values = get_action_values(W, S)
-    A = get_action(action_values, epsilon)
     t_episode = 0
     for t in tqdm(range(int(20000))):
         env.render()
-        epsilon = 0.99999 * epsilon
+        I = 1
+        A = get_action(S, thetas)
         S_tag, R, done, info = env.step(A)
-        action_values_tag = get_action_values(W, S_tag)
-        A_tag = get_action(action_values_tag, epsilon)
-        delta = alpha * (R + gamma * action_values_tag[A_tag] - action_values[A])
-        e = gamma * lam * e
-        e[:, A] += features_vector(S)
-        W = W + e * delta
+        delta = R + gamma * get_state_value(S_tag, W) - get_state_value(S, W)
+        W = W + alpha_w * delta * features_vector(S)
+        thetas[A] += alpha_theta * I * delta * (features_vector(S) - get_expected_feature(S, thetas[A]))
+        print((features_vector(S) - get_expected_feature(S, thetas[A])))
+        I = gamma * I
         S = S_tag
-        action_values = get_action_values(W, S)
-        A = A_tag
-        t_episode += 1
-
         if done or t_episode >= max_episode_steps:
             S = env.reset()
-            action_values = get_action_values(W, S)
-            A = get_action(action_values, epsilon)
+            A = get_action(S, thetas)
             t_episode = 0
 
         if t != 0 and t % x_step_size == 0:
-            value = policy_value(W)
-            print("\n***** Appending Data ***** (α={}, λ={})".format(alpha, lam))
+            value = policy_value(W, thetas)
+            print("\n***** Appending Data *****)")
             print("X: {}".format(t))
             print("Y: {}".format(value))
             print()
             X.append(t)
             Y.append(value)
 
-    return W, X, Y
+    return W, thetas, X, Y
 
 
-def get_action(action_values, epsilon):
-    if np.random.random() < epsilon:
-        return np.random.randint(0, 3)
-    else:
-        return np.argmax(action_values)
-
-
-def simulate_agent(W):
+def simulate_agent(thetas):
     S = env.reset()
     for t in range(max_episode_steps):
         env.render()
-        action_values = get_action_values(W, S)
-        A = get_action(action_values, 0)
+        A = get_action(S, thetas)
         S, reward, done, info = env.step(A)
         if done:
             env.render()
@@ -92,7 +107,7 @@ def simulate_agent(W):
     env.close()
 
 
-def policy_value(W):
+def policy_value(thetas):
     num_episodes = 100
     returns = []
     for i in range(num_episodes):
@@ -100,8 +115,7 @@ def policy_value(W):
         t = 0
         discounted_rewards = []
         while True:  # begin episode
-            action_values = get_action_values(W, S)
-            A = get_action(action_values, 0)
+            A = get_action(S, thetas)
             S, R, done, info = env.step(A)
             discounted_rewards.append((gamma ** t) * R)
             t += 1
@@ -111,18 +125,20 @@ def policy_value(W):
         returns.append(episode_return)
     return np.mean(returns)
 
+
 def print_title(s):
     print()
     print("*" * len(s))
     print(s)
     print("*" * len(s))
 
+
 if __name__ == '__main__':
     # Initialization
     gamma = 1
-    alpha = 0.02
-    lam = 0.5
-    x_step_size = 50000
+    alpha_theta = 0.2
+    alpha_W = 0.12
+    x_step_size = 2000
     sigma_p = 0.04
     sigma_v = 0.0004
     max_episode_steps = 500
@@ -143,7 +159,6 @@ if __name__ == '__main__':
     nA = 3
     env.reset()
 
-
     # 0 Render full episode with learned policy
     print_title("Simulating Learned Policy")
     try:
@@ -153,10 +168,9 @@ if __name__ == '__main__':
     except:
         print("A weights file was not found.")
 
-
-    # 1 Learn SARSA(λ) with given alpha, lam
-    print_title("Starting Sarsa(λ) with α={}, λ={}".format(alpha, lam))
-    W, X, Y = sarsa_lambda(lam, alpha)
+    # 1 Run actor-critic
+    print_title("Starting actor-critic with env{}".format(env.unwrapped.spec.id))
+    W, thetas, X, Y = actor_critic(alpha_theta, alpha_W)
 
     # 2 Output/append graphics
     plt.figure(figsize=(12, 7))
