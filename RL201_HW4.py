@@ -41,7 +41,8 @@ def get_state_value(S, W):
 
 def softmax(s, a, theta):
     F_arr = features_vector(s, a)
-    return np.exp(F_arr.dot(theta)) / sum([np.exp(F_arr.dot(theta)) for a in range(nA)])
+    eta = F_arr.dot(theta)
+    return np.exp(F_arr.dot(theta) - eta) / sum([np.exp(F_arr.dot(theta) - eta) for a in range(nA)])
 
 
 def get_expected_feature(S, theta):
@@ -51,7 +52,7 @@ def get_expected_feature(S, theta):
     :return:
     """
     F_arr = features_vector(S)
-    return np.mean([softmax(S, a, theta) * F_arr for a in range(nA)])
+    return np.sum([softmax(S, a, theta) * F_arr for a in range(nA)])
 
 
 def actor_critic(alpha_theta, alpha_w):
@@ -67,15 +68,14 @@ def actor_critic(alpha_theta, alpha_w):
 
     S = env.reset()
     t_episode = 0
-    for t in tqdm(range(int(20000))):
+    I = 1
+    for t in tqdm(range(int(20000)), desc="Actor-Critic Steps"):
         env.render()
-        I = 1
         A = get_action(S, thetas)
         S_tag, R, done, info = env.step(A)
         delta = R + gamma * get_state_value(S_tag, W) - get_state_value(S, W)
         W = W + alpha_w * delta * features_vector(S)
         thetas[A] += alpha_theta * I * delta * (features_vector(S) - get_expected_feature(S, thetas[A]))
-        print((features_vector(S) - get_expected_feature(S, thetas[A])))
         I = gamma * I
         S = S_tag
         if done or t_episode >= max_episode_steps:
@@ -84,7 +84,7 @@ def actor_critic(alpha_theta, alpha_w):
             t_episode = 0
 
         if t != 0 and t % x_step_size == 0:
-            value = policy_value(W, thetas)
+            value = policy_value(thetas)
             print("\n***** Appending Data *****)")
             print("X: {}".format(t))
             print("Y: {}".format(value))
@@ -108,9 +108,9 @@ def simulate_agent(thetas):
 
 
 def policy_value(thetas):
-    num_episodes = 100
+    num_episodes = 5
     returns = []
-    for i in range(num_episodes):
+    for i in tqdm(range(num_episodes), desc="Evaluating Policy Episode"):
         S = env.reset()
         t = 0
         discounted_rewards = []
@@ -136,8 +136,8 @@ def print_title(s):
 if __name__ == '__main__':
     # Initialization
     gamma = 1
-    alpha_theta = 0.2
-    alpha_W = 0.12
+    alpha_theta = 0.02
+    alpha_W = 0.1
     x_step_size = 2000
     sigma_p = 0.04
     sigma_v = 0.0004
@@ -145,8 +145,8 @@ if __name__ == '__main__':
     covariance_matrix = np.diag((sigma_p, sigma_v))
 
     # initialize centers of gaussian distributions
-    N_p = 20
-    N_v = 5
+    N_p = 8
+    N_v = 8
     nC = N_p * N_v
     position_min, position_max = -1, 0.5
     velocity_min, velocity_max = -0.07, 0.07
