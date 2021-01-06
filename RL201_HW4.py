@@ -23,9 +23,12 @@ def features_vector(S, A=None):
     return vec
 
 
-def get_action(s, thetas):
-    action_probabilites = [softmax(s, a, thetas[a]) for a in range(nA)]
-    return np.random.choice(range(nA), p=action_probabilites)
+def get_action(s, thetas, epsilon=0):
+    if np.random.random() < epsilon:
+        return np.random.randint(nA)
+    else:
+        action_probabilites = [softmax(s, a, thetas[a]) for a in range(nA)]
+        return np.random.choice(range(nA), p=action_probabilites)
 
 
 def get_state_value(S, W):
@@ -63,6 +66,8 @@ def actor_critic(alpha_theta, alpha_w):
     :return: learned parameters theta, W
     """
     X, Y = [], []
+    epsilon = 0.05
+
     W = np.ones(nC)
     thetas = [np.ones(nC) for _ in range(nA)]
 
@@ -71,7 +76,8 @@ def actor_critic(alpha_theta, alpha_w):
     I = 1
     for t in tqdm(range(int(20000)), desc="Actor-Critic Steps"):
         env.render()
-        A = get_action(S, thetas)
+        epsilon = 0.99999 * epsilon
+        A = get_action(S, thetas, epsilon)
         S_tag, R, done, info = env.step(A)
         delta = R + gamma * get_state_value(S_tag, W) - get_state_value(S, W)
         W = W + alpha_w * delta * features_vector(S)
@@ -80,7 +86,6 @@ def actor_critic(alpha_theta, alpha_w):
         S = S_tag
         if done or t_episode >= max_episode_steps:
             S = env.reset()
-            A = get_action(S, thetas)
             t_episode = 0
 
         if t != 0 and t % x_step_size == 0:
@@ -134,30 +139,31 @@ def print_title(s):
 
 
 if __name__ == '__main__':
-    # Initialization
+    # Initialization - GYM
+    max_episode_steps = 500
+    env = gym.make('MountainCar-v0')
+    env._max_episode_steps = max_episode_steps
+    nA = 3
+    env.reset()
+
+    # Initialization - Actor-Critic
     gamma = 1
     alpha_theta = 0.02
     alpha_W = 0.1
     x_step_size = 2000
     sigma_p = 0.04
     sigma_v = 0.0004
-    max_episode_steps = 500
     covariance_matrix = np.diag((sigma_p, sigma_v))
 
-    # initialize centers of gaussian distributions
+    # Initialization
     N_p = 8
     N_v = 8
     nC = N_p * N_v
-    position_min, position_max = -1, 0.5
-    velocity_min, velocity_max = -0.07, 0.07
+    position_min, position_max = env.observation_space.low[0] * 0.9, env.observation_space.high[0] * 0.9
+    velocity_min, velocity_max = env.observation_space.low[1] * 0.9, env.observation_space.low[1] * 0.9
     C_p = np.linspace(position_min, position_max, num=N_p, endpoint=True)
     C_v = np.linspace(velocity_min, velocity_max, num=N_v, endpoint=True)
     C_arr = np.transpose([np.tile(C_p, len(C_v)), np.repeat(C_v, len(C_p))])
-
-    env = gym.make('MountainCar-v0')
-    env._max_episode_steps = max_episode_steps
-    nA = 3
-    env.reset()
 
     # 0 Render full episode with learned policy
     print_title("Simulating Learned Policy")
@@ -186,4 +192,8 @@ if __name__ == '__main__':
     # 4. Save weights to file
     fname = "weights_{}.csv".format(datetime.now().strftime("%d-%m-%Y-%H-%M-%S"))
     print_title("Saving weights to file {}".format(fname))
-    np.savetxt(fname)
+    np.savetxt(fname, W)
+    fname = "thetas_{}.csv".format(datetime.now().strftime("%d-%m-%Y-%H-%M-%S"))
+    print_title("Saving thetas to file {}".format(fname))
+    np.savetxt(fname, thetas)
+
