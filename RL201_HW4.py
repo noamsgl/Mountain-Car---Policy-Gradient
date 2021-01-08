@@ -1,3 +1,9 @@
+"""
+Noam Siegel and Dolev Orgad,
+Reinforcement Learning,
+Ben Gurion University of the Negev, 2020
+"""
+
 from datetime import datetime
 
 import gym
