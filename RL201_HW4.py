@@ -184,7 +184,7 @@ if __name__ == '__main__':
     # 0 Render full episode with learned policy
     print_title("Simulating Learned Policy")
     try:
-        thetas = np.loadtxt("thetas_HW4.csv")
+        thetas = np.loadtxt("thetas.csv")
         print("A weights file was found. Simulating:")
         simulate_agent(thetas)
     except:
