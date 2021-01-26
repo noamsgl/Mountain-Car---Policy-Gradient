@@ -100,7 +100,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 Noam Siegel - noamsi@post.bgu.ac.il
 
-Dolev Orgad - dolevi101@gmail.com
+Dolev Orgad - dolevor@post.bgu.ac.il
 
 Project Link: [https://github.com/noamsgl/Mountain-Car---Policy-Gradient](https://github.com/noamsgl/Mountain-Car---Policy-Gradient)
 
