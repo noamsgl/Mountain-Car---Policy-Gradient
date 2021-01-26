@@ -20,10 +20,10 @@ If this is an issue, remove the tqdm wrapper in line #40
 """
 
 
-def features_vector(S, A=None):
+def features_vector(S):
     p, v = S
     x = abs(C_arr - np.asarray([p, v]))
-    vec = np.zeros(len(x))
+    vec = np.zeros((len(x), 1))
     for i in range(len(x)):
         vec[i] = np.exp(np.dot(np.dot(-x[i].T, inv(covariance_matrix)), x[i]) / 2)
     return vec
@@ -33,8 +33,8 @@ def get_action(s, thetas, epsilon=0):
     if np.random.random() < epsilon:
         return np.random.randint(nA)
     else:
-        action_probabilites = [softmax(s, a, thetas[a]) for a in range(nA)]
-        return np.random.choice(range(nA), p=action_probabilites)
+        action_probabilites = softmax(s, thetas)
+        return np.random.choice(range(nA), p=action_probabilites.flatten())
 
 
 def get_state_value(S, W):
@@ -42,26 +42,27 @@ def get_state_value(S, W):
     Return V(S)
     :param S: current state (p, v)
     :param W: Weights of state Value function (
-    :return: state value (scalar)
+    :return: state value
     """
     F_arr = features_vector(S)
-    return F_arr.dot(W)
+    return W.T @ F_arr
 
 
-def softmax(s, a, theta):
-    F_arr = features_vector(s, a)
-    eta = F_arr.dot(theta)
-    return np.exp(F_arr.dot(theta) - eta) / sum([np.exp(F_arr.dot(theta) - eta) for a in range(nA)])
+def softmax(s, theta):
+    F_arr = features_vector(s)
+    policy = np.exp(theta.T @ F_arr - max(theta.T @ F_arr))
+    policy = policy / np.sum(policy)
+    return policy
 
 
-def get_expected_feature(S, theta):
+def get_expected_feature(S, policy):
     """
     Return expected features based on policy derived from theta with softmax
     :param theta: vector of weights
     :return:
     """
     F_arr = features_vector(S)
-    return np.sum([softmax(S, a, theta) * F_arr for a in range(nA)])
+    return F_arr @ policy.T
 
 
 def actor_critic(alpha_theta, alpha_w):
@@ -72,10 +73,11 @@ def actor_critic(alpha_theta, alpha_w):
     :return: learned parameters theta, W
     """
     X, Y = [], []
-    epsilon = 0.05
+    epsilon = 0.1
 
-    W = np.ones(nC)
-    thetas = [np.ones(nC) for _ in range(nA)]
+    W = np.ones((nC, 1))
+    thetas = np.ones((nC, nA))
+
 
     S = env.reset()
     t_episode = 0
@@ -83,11 +85,19 @@ def actor_critic(alpha_theta, alpha_w):
     for t in tqdm(range(int(20000)), desc="Actor-Critic Steps"):
         env.render()
         epsilon = 0.99999 * epsilon
+
+        phi = features_vector(S)
+        policy = softmax(S, thetas)
         A = get_action(S, thetas, epsilon)
         S_tag, R, done, info = env.step(A)
+
         delta = R + gamma * get_state_value(S_tag, W) - get_state_value(S, W)
-        W = W + alpha_w * delta * features_vector(S)
-        thetas[A] += alpha_theta * I * delta * (features_vector(S) - get_expected_feature(S, thetas[A]))
+        W = W + alpha_w * delta * phi
+
+        F_mat = np.zeros((nC, nA))
+        F_mat[:, A] = features_vector(S).flatten()
+        thetas = thetas + alpha_theta * I * delta * (F_mat - get_expected_feature(S, policy))
+
         I = gamma * I
         S = S_tag
         if done or t_episode >= max_episode_steps:
@@ -119,7 +129,7 @@ def simulate_agent(thetas):
 
 
 def policy_value(thetas):
-    num_episodes = 5
+    num_episodes = 100
     returns = []
     for i in tqdm(range(num_episodes), desc="Evaluating Policy Episode"):
         S = env.reset()
@@ -155,8 +165,8 @@ if __name__ == '__main__':
     # Initialization - Actor-Critic
     gamma = 1
     alpha_theta = 0.02
-    alpha_W = 0.1
-    x_step_size = 2000
+    alpha_W = 0.08
+    x_step_size = 500
     sigma_p = 0.04
     sigma_v = 0.0004
     covariance_matrix = np.diag((sigma_p, sigma_v))
@@ -166,7 +176,7 @@ if __name__ == '__main__':
     N_v = 8
     nC = N_p * N_v
     position_min, position_max = env.observation_space.low[0] * 0.9, env.observation_space.high[0] * 0.9
-    velocity_min, velocity_max = env.observation_space.low[1] * 0.9, env.observation_space.low[1] * 0.9
+    velocity_min, velocity_max = env.observation_space.low[1] * 0.9, env.observation_space.high[1] * 0.9
     C_p = np.linspace(position_min, position_max, num=N_p, endpoint=True)
     C_v = np.linspace(velocity_min, velocity_max, num=N_v, endpoint=True)
     C_arr = np.transpose([np.tile(C_p, len(C_v)), np.repeat(C_v, len(C_p))])
@@ -174,9 +184,9 @@ if __name__ == '__main__':
     # 0 Render full episode with learned policy
     print_title("Simulating Learned Policy")
     try:
-        W = np.loadtxt("weights.csv", delimiter=',')
+        thetas = np.loadtxt("thetas_HW4.csv")
         print("A weights file was found. Simulating:")
-        simulate_agent(W)
+        simulate_agent(thetas)
     except:
         print("A weights file was not found.")
 
